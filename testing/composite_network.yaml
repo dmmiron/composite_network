@@ -1,0 +1,173 @@
+!obj:pylearn2.train.Train {
+    dataset: &train !obj:pylearn2.datasets.isbi.ISBI {
+        purpose: 'train',    
+        nsamples: 100000, 
+        patchSize: 39,
+        data_mean: 0.0,
+        data_std: 1.0,
+    },
+    model: !obj:pylearn2.models.mlp.MLP {
+        batch_size: 100,
+        nvis: 1521, #2401,
+        layers: [
+            !obj:pylearn2.models.mlp.CompositeLayer {
+                layer_name: 'h0_outer',                       
+                layers: [
+                    !obj:pylearn2.models.mlp.FlattenerLayer {
+                        raw_layer: 
+                            !obj:pylearn2.models.mlp.CompositeLayer {
+                                layer_name: 'h0_inner',
+                                layers: [
+                                    !obj:pylearn2.models.mlp.RectifiedLinear {
+                                        dim: 500,
+                                        irange: 0.01,
+                                        layer_name: 'h0_rl',
+                                        init_bias: 0.000000,
+                                    },
+                                    !obj:pylearn2.models.mlp.PretrainedLayer {
+                                        layer_name: 'h0_fixed_0',
+                                        freeze_params: 'True',
+                                        layer_content: !pkl: 'fixed_autoencoder.pkl',
+                                    },
+                                ],
+                            },
+                    },
+                    !obj:pylearn2.models.mlp.PretrainedLayer {
+                        layer_name: 'h0_fixed_1',
+                        freeze_params: 'True',
+                        layer_content: !pkl: 'fixed_autoencoder.pkl',
+                    },
+                ],
+            },
+            !obj:pylearn2.models.mlp.CompositeLayer {
+                layer_name: 'h1_outer',                       
+                layers: [
+                    !obj:pylearn2.models.mlp.FlattenerLayer {
+                        raw_layer: 
+                            !obj:pylearn2.models.mlp.CompositeLayer {
+                                layer_name: 'h1_inner',
+                                layers: [
+                                    !obj:pylearn2.models.mlp.RectifiedLinear {
+                                        dim: 500,
+                                        irange: 0.01,
+                                        layer_name: 'h1_rl',
+                                        init_bias: 0.000000,
+                                    },
+                                    !obj:pylearn2.models.mlp.PretrainedLayer {
+                                        layer_name: 'h1_fixed_0',
+                                        freeze_params: 'True',
+                                        layer_content: !pkl: 'fixed_autoencoder.pkl',
+                                    },
+                                ],
+                                #inner composite layer gets composite input space (Flattened output, autoencoder output) where autoencoder output is the original input to the whole network
+                                #thus we just need to pass the flattened output to the RL and the autoencoder output to the next autoencoder
+                                inputs_to_layers: {
+                                    0: [0],
+                                    1: [1],
+                                }
+                            },
+                    },
+                    !obj:pylearn2.models.mlp.PretrainedLayer {
+                        layer_name: 'h1_fixed_1',
+                        freeze_params: 'True',
+                        layer_content: !pkl: 'fixed_autoencoder.pkl',
+                    },
+                ],
+                #the outer composite layer gets composite input space (flattened output, autoencoder output)
+                #The inner composite layer needs the same input, while the autoencoder needs only the autoencoder
+                inputs_to_layers: {
+                    0: [0],
+                    1: [0, 1],
+                },
+             },
+             !obj:pylearn2.models.mlp.CompositeLayer {
+                 layer_name: 'h2_outer',                       
+                 layers: [
+                     !obj:pylearn2.models.mlp.FlattenerLayer {
+                         raw_layer: 
+                             !obj:pylearn2.models.mlp.CompositeLayer {
+                                 layer_name: 'h2_inner',
+                                 layers: [
+                                     !obj:pylearn2.models.mlp.RectifiedLinear {
+                                         dim: 500,
+                                         irange: 0.01,
+                                         layer_name: 'h2_rl',
+                                         init_bias: 0.000000,
+                                     },
+                                     !obj:pylearn2.models.mlp.PretrainedLayer {
+                                         layer_name: 'h2_fixed_0',
+                                         freeze_params: 'True',
+                                         layer_content: !pkl: 'fixed_autoencoder.pkl',
+                                     },
+                                 ],
+                                 #inner composite layer gets composite input space (Flattened output, autoencoder output) where autoencoder output is the original input to the whole network
+                                 #thus we just need to pass the flattened output to the RL and the autoencoder output to the next autoencoder
+                                 inputs_to_layers: {
+                                     0: [0],
+                                     1: [1],
+                                 }
+                             },
+                     },
+                     !obj:pylearn2.models.mlp.PretrainedLayer {
+                         layer_name: 'h2_fixed_1',
+                         freeze_params: 'True',
+                         layer_content: !pkl: 'fixed_autoencoder.pkl',
+                     },
+                 ],
+                 #the outer composite layer gets composite input space (flattened output, autoencoder output)
+                 #The inner composite layer needs the same input, while the autoencoder needs only the autoencoder
+                 inputs_to_layers: {
+                     0: [0],
+                     1: [0, 1],
+                 },
+             },
+             !obj:pylearn2.models.mlp.Softmax {
+                 layer_name: 'y',
+                 n_classes: 2,
+                 sparse_init: 0,
+             },
+         ],
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        learning_rate: 0.05,
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+            init_momentum: 0.5,
+        },
+        monitoring_dataset:
+            {
+            'valid' : !obj:pylearn2.datasets.isbi.ISBI {
+            purpose: 'validate',
+            nsamples: 10000,
+            patchSize: 39,
+            data_mean: 0.0,
+            data_std: 1.0,
+                },
+            },
+#        termination_criterion: !obj:pylearn2.termination_criteria.EpochCounter {
+#            max_epochs: 100,
+#        },
+            
+        termination_criterion: !obj:pylearn2.termination_criteria.MonitorBased {
+            channel_name: "valid_y_misclass",
+            prop_decrease: 0.,
+            N: 100
+        },
+        update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+            decay_factor: 1.00004, 
+            min_lr: 0.0001,
+        }
+    },
+    extensions: [
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            start: 1,
+            saturate: 250,
+            final_momentum: 0.8
+        },
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+            channel_name: 'valid_y_misclass',
+            save_path: "${PYLEARN2_TRAIN_FILE_FULL_STEM}_best.pkl"
+        },
+    ],
+    save_path: "${PYLEARN2_TRAIN_FILE_FULL_STEM}.pkl",
+    save_freq : 1,
+}
